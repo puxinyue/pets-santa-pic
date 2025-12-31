@@ -98,7 +98,7 @@ export default function SignInForm() {
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={isPending} className="mt-5 w-full">
+        <Button type="submit" disabled={isPending} className="mt-5 w-full h-12 rounded-full bg-red-600 dark:bg-red-600 text-white font-bold text-base hover:bg-red-700 dark:hover:bg-red-500 transition-all shadow-lg hover:shadow-xl">
           Sign In
         </Button>
       </form>

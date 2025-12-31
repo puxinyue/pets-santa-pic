@@ -1,23 +1,72 @@
 import { type Metadata } from "next";
 import SignInForm from "./form";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { authClient } from "@/lib/auth-client";
 
 export const metadata: Metadata = {
-  title: "Sign In",
+  title: "Login - Pets Santa",
+  description: "Login to your Pets Santa account to save and download your Christmas pet portraits",
 };
 
-export default function SignInPage() {
+export default async function SignInPage() {
+  const session = await authClient.getSession();
+
+  if (session.data?.user) {
+    redirect("/");
+  }
+
   return (
-    <div className="flex min-h-screen w-full flex-col items-center justify-center">
-      <div className="flex w-full flex-col rounded-2xl border border-foreground/10 px-8 py-5 md:w-96">
-        <h1>Sign In</h1>
-        <p>Example sign in page using Better Auth</p>
-        <SignInForm />
-        <div className="flex items-center justify-center gap-2">
-          <small>Don&apos;t have account?</small>
-          <Link href={"/signup"} className="text-sm font-bold leading-none">
-            Sign Up
+    <div className="relative min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-red-50 via-white to-green-50 dark:from-red-900/10 dark:via-slate-950 dark:to-green-900/10 transition-colors duration-300">
+      {/* Background decoration */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-red-100 dark:bg-red-900/20 rounded-full blur-3xl opacity-50"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-green-100 dark:bg-green-900/20 rounded-full blur-3xl opacity-50"></div>
+      </div>
+
+      <div className="relative w-full max-w-md">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <Link href="/" className="inline-flex items-center gap-3 group mb-8">
+            <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center text-white text-2xl shadow-lg group-hover:scale-110 transition-transform">
+              🐾
+            </div>
+            <span className="festive-font text-3xl font-bold text-red-600 tracking-tight">Pets Santa</span>
           </Link>
+          <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-2">Welcome Back!</h1>
+          <p className="text-slate-600 dark:text-slate-400">
+            Login to save your festive pet portraits
+          </p>
+        </div>
+
+        {/* Form Card */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-8 transition-colors duration-300">
+          <SignInForm />
+
+          <div className="mt-6 text-center">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Don't have an account?{" "}
+              <Link href="/signup" className="font-bold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors">
+                Create one here
+              </Link>
+            </p>
+          </div>
+
+          <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+            <Link href="/" className="flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to home
+            </Link>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-8 text-center">
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            By logging in, you agree to our Terms of Service and Privacy Policy
+          </p>
         </div>
       </div>
     </div>
