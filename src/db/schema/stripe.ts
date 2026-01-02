@@ -5,8 +5,8 @@ import { user } from "./auth/user";
 export const paymentHistory = pgTable("payment_history", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => user.id),
-  stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
-  stripeSessionId: text("stripe_session_id"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"), // 可为空，在支付完成时通过 webhook 更新
+  stripeSessionId: text("stripe_session_id").notNull(), // session ID 在创建时就有
   amount: integer("amount").notNull(), // 金额（分为单位）
   currency: text("currency").notNull().default("usd"),
   status: text("status").notNull(), // 'pending', 'completed', 'failed', 'refunded'

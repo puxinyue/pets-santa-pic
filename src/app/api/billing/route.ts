@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authClient } from '@/lib/auth-client';
+import { getServerSession } from "@/lib/auth/get-session";
 import { db } from '@/db';
 import { userCredits, paymentHistory, creditTransactions } from '@/db/schema/stripe';
 import { eq, desc } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
   try {
-    // 获取用户信息
-    const { data: session } = await authClient.getSession();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // 获取用户信息（可选，允许未登录用户）
+    const session = await getServerSession();
+    const userId = session?.user?.id;
 
-    const userId = session.user.id;
+    // 如果没有用户ID，返回空数据
+    if (!userId) {
+      return NextResponse.json({
+        credits: null,
+        payments: [],
+        transactions: [],
+      });
+    }
 
     // 获取用户积分信息
     const creditsData = await db

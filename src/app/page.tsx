@@ -321,7 +321,7 @@ export default function Home() {
                 if (data.url) {
                   window.location.href = data.url;
                 } else {
-                  alert('Failed to create checkout session');
+                  alert('Failed to create checkout session111');
                 }
               })
               .catch((error) => {

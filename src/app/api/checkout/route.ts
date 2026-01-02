@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { authClient } from '@/lib/auth-client';
+import { getServerSession } from "@/lib/auth/get-session";
 import { db } from '@/db';
 import { paymentHistory } from '@/db/schema/stripe';
 import { eq } from 'drizzle-orm';
@@ -12,44 +12,60 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(req: NextRequest) {
   try {
+    console.log('📦 Checkout request received');
+    
     // 获取用户信息
-    const { data: session } = await authClient.getSession();
+    const session = await getServerSession()
+    console.log('🔐 Session data:', session);
+    
     if (!session?.user?.id) {
+      console.log('❌ Unauthorized: No user ID in session');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const userId = session.user.id;
-
-    // 创建 Stripe checkout session
+    console.log('✅ User ID:', userId);
+    const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_BASE_URL;
+    
+    // 创建 Stripe checkout session（使用一次性支付）
     const checkoutSession = await stripe.checkout.sessions.create({
-      mode: 'payment',
+      mode: 'payment', // 一次性支付模式
       payment_method_types: ['card'],
       line_items: [
         {
-          price: process.env.PRICE_ID!,
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: 'Holiday Pack - 200 Credits',
+              description: '200 Holiday Credits for AI Christmas Pet Portraits',
+            },
+            unit_amount: 1000, // $10.00 in cents
+          },
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/billing?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/pricing?canceled=true`,
-      customer_email: session.user.email || undefined,
+      success_url: `${origin}/billing?success=true`,
+      cancel_url: `${origin}/pricing?canceled=true`,
+      customer_email: session?.user?.email || undefined,
       metadata: {
-        userId,
+        userId: userId || 'anonymous',
         credits: '200',
       },
     });
 
-    // 在数据库中创建支付记录
-    await db.insert(paymentHistory).values({
-      id: randomUUID(),
-      userId,
-      stripePaymentIntentId: checkoutSession.payment_intent as string,
-      stripeSessionId: checkoutSession.id,
-      amount: 1000, // $10.00 in cents
-      currency: 'usd',
-      status: 'pending',
-      credits: 200,
-    });
+    // 在数据库中创建支付记录（如果有用户ID）
+    if (userId) {
+      await db.insert(paymentHistory).values({
+        id: randomUUID(),
+        userId,
+        stripePaymentIntentId: checkoutSession.payment_intent as string | null, // 可能为 null，在支付完成时通过 webhook 更新
+        stripeSessionId: checkoutSession.id,
+        amount: 1000, // $10.00 in cents
+        currency: 'usd',
+        status: 'pending',
+        credits: 200,
+      });
+    }
 
     return NextResponse.json({
       sessionId: checkoutSession.id,

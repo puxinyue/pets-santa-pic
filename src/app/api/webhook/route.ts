@@ -13,8 +13,15 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 export async function POST(req: NextRequest) {
   try {
+    // 确保请求不被认证中间件拦截
+    // 立即返回响应以避免重定向
     const body = await req.text();
-    const signature = req.headers.get('stripe-signature')!;
+    const signature = req.headers.get('stripe-signature');
+
+    if (!signature) {
+      console.error('Missing stripe-signature header');
+      return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
+    }
 
     let event: Stripe.Event;
 
@@ -24,12 +31,13 @@ export async function POST(req: NextRequest) {
       console.error('Webhook signature verification failed:', err);
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
-
+   console.log('event', event);
     // 处理不同类型的事件
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const paymentIntentId = session.payment_intent as string;
+        const sessionId = session.id;
         const userId = session.metadata?.userId;
         const credits = parseInt(session.metadata?.credits || '0');
 
@@ -38,11 +46,14 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'Missing metadata' }, { status: 400 });
         }
 
-        // 更新支付状态
+        // 通过 session ID 查找支付记录并更新（包括 payment_intent_id）
         await db
           .update(paymentHistory)
-          .set({ status: 'completed' })
-          .where(eq(paymentHistory.stripePaymentIntentId, paymentIntentId));
+          .set({ 
+            status: 'completed',
+            stripePaymentIntentId: paymentIntentId, // 更新 payment_intent_id
+          })
+          .where(eq(paymentHistory.stripeSessionId, sessionId));
 
         // 获取或创建用户积分记录
         const existingCredits = await db
@@ -81,16 +92,16 @@ export async function POST(req: NextRequest) {
             .where(eq(userCredits.userId, userId));
 
           // 创建积分交易记录
+          const paymentRecord = await db
+            .select()
+            .from(paymentHistory)
+            .where(eq(paymentHistory.stripeSessionId, sessionId))
+            .limit(1);
+          
           await db.insert(creditTransactions).values({
             id: randomUUID(),
             userId,
-            paymentId: (
-              await db
-                .select()
-                .from(paymentHistory)
-                .where(eq(paymentHistory.stripePaymentIntentId, paymentIntentId))
-                .limit(1)
-            )[0]?.id,
+            paymentId: paymentRecord[0]?.id,
             type: 'purchase',
             amount: credits,
             description: `Purchased ${credits} credits`,
@@ -104,7 +115,7 @@ export async function POST(req: NextRequest) {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         const paymentIntentId = paymentIntent.id;
 
-        // 更新支付状态为失败
+        // 更新支付状态为失败（通过 payment_intent_id 查找，此时应该已经存在）
         await db
           .update(paymentHistory)
           .set({ status: 'failed' })

@@ -13,13 +13,25 @@ export async function proxy(request: NextRequest) {
 
   const isApiAuth = request.nextUrl.pathname.startsWith(apiAuthPrefix);
 
+  // 公开的 API 路由（不需要认证）
+  const publicApiRoutes = ['/api/webhook', '/api/checkout', '/api/billing'];
+  const isPublicApiRoute = publicApiRoutes.some(route => 
+    request.nextUrl.pathname.startsWith(route)
+  );
+
   const isPublicRoute = publicRoutes.includes(request.nextUrl.pathname);
 
   const isAuthRoute = () => {
     return authRoutes.some((path) => request.nextUrl.pathname.startsWith(path));
   };
 
+  // 允许认证相关的 API 路由
   if (isApiAuth) {
+    return NextResponse.next();
+  }
+
+  // 允许公开的 API 路由（如 webhook、checkout 等）
+  if (isPublicApiRoute) {
     return NextResponse.next();
   }
 
