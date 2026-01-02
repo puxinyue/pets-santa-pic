@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   description: "Login to your Pets Santa account to save and download your Christmas pet portraits",
 };
 
+// Force dynamic rendering to avoid build-time fetch errors
+export const dynamic = 'force-dynamic';
+
 export default async function SignInPage() {
   const session = await authClient.getSession();
 
