@@ -21,7 +21,7 @@ const Hero: React.FC<HeroProps> = ({ onGenerated, user, onLogin }) => {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     if (selected) {
       if (selected.size > 10 * 1024 * 1024) {
@@ -30,11 +30,35 @@ const Hero: React.FC<HeroProps> = ({ onGenerated, user, onLogin }) => {
       }
       setFile(selected);
       setError(null);
+      
+      // 先显示本地预览
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreview(reader.result as string);
       };
       reader.readAsDataURL(selected);
+      
+      // 上传到 Vercel Blob
+      try {
+        const formData = new FormData();
+        formData.append('file', selected);
+        
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error('Upload failed');
+        }
+        
+        const data = await response.json();
+        // 将 Blob URL 保存到 state，用于后续生成
+        setPreview(data.url);
+      } catch (err) {
+        console.error('Upload error:', err);
+        setError('Failed to upload image. Please try again.');
+      }
     }
   };
 

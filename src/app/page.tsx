@@ -121,31 +121,13 @@ const CTASection = ({ onScrollToTop, onGoPricing }: { onScrollToTop: () => void,
 const PricingPage = ({ onPlanSelect }: { onPlanSelect: (plan: string) => void }) => {
   const plans = [
     {
-      name: 'Trial Pack',
-      price: '$0',
-      sub: '',
-      desc: 'Try it out with a few free portraits.',
-      features: ['2 Holiday Credits', 'Standard quality downloads', 'Limited styles', 'No credit card required'],
-      button: 'Claim Free Credits',
-      primary: false
-    },
-    {
       name: 'Holiday Pack',
-      price: '$9.99',
+      price: '$10',
       sub: '',
       desc: 'Perfect for sharing with family and friends.',
-      features: ['10 Holiday Credits', 'High-quality downloads', 'All Christmas styles', 'Priority generation', 'No expiration'],
-      button: 'Buy 10 Credits',
+      features: ['200 Holiday Credits', 'High-quality downloads', 'All Christmas styles', 'Priority generation', 'No expiration'],
+      button: 'Buy 200 Credits',
       primary: true
-    },
-    {
-      name: 'Studio Pack',
-      price: '$24.99',
-      sub: '',
-      desc: 'For pet lovers who want all the options.',
-      features: ['30 Holiday Credits', 'Bulk generation', 'Commercial-friendly usage', '24/7 Priority Support', 'No expiration'],
-      button: 'Buy 30 Credits',
-      primary: false
     }
   ];
 
@@ -156,7 +138,7 @@ const PricingPage = ({ onPlanSelect }: { onPlanSelect: (plan: string) => void })
           <h1 className="text-6xl font-bold text-slate-900 dark:text-white mb-6 festive-font">Pricing</h1>
           <p className="text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">One-time purchase credit packs. No subscriptions, just holiday fun.</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 items-stretch">
+        <div className="max-w-2xl mx-auto">
           {plans.map((plan, i) => (
             <div key={i} className={`relative bg-white dark:bg-slate-900 p-10 rounded-[2.5rem] shadow-xl border flex flex-col h-full transform transition-all hover:shadow-2xl ${plan.primary ? 'border-red-500 dark:border-red-600 scale-105 z-10' : 'border-slate-100 dark:border-slate-800'}`}>
               {plan.primary && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white text-[10px] font-bold uppercase tracking-widest px-6 py-2 rounded-full shadow-xl">Best Value</div>}
@@ -319,7 +301,36 @@ export default function Home() {
           <CTASection onScrollToTop={scrollToTop} onGoPricing={() => setCurrentPage('pricing')} />
         </>
       )}
-      {currentPage === 'pricing' && <PricingPage onPlanSelect={(plan) => mappedUser ? alert(`Processing purchase for ${plan}...`) : setIsAuthModalOpen(true)} />}
+      {currentPage === 'pricing' && (
+        <PricingPage
+          onPlanSelect={(plan) => {
+            if (!mappedUser) {
+              setIsAuthModalOpen(true);
+              return;
+            }
+
+            // 创建 Stripe checkout session
+            fetch('/api/checkout', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            })
+              .then((res) => res.json())
+              .then((data) => {
+                if (data.url) {
+                  window.location.href = data.url;
+                } else {
+                  alert('Failed to create checkout session');
+                }
+              })
+              .catch((error) => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+              });
+          }}
+        />
+      )}
       {currentPage === 'my-creations' && <MyCreationsPage creations={creations} />}
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
     </Layout>

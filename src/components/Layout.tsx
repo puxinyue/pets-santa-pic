@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { Page, User } from '@/lib/types';
+import { useRouter } from 'next/navigation';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -25,6 +26,8 @@ const Layout: React.FC<LayoutProps> = ({
   isDarkMode,
   toggleDarkMode
 }) => {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
       <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors duration-300">
@@ -89,7 +92,10 @@ const Layout: React.FC<LayoutProps> = ({
                     >
                       My Creations
                     </button>
-                    <button className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+                    <button
+                      onClick={() => router.push('/billing')}
+                      className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+                    >
                       Billing
                     </button>
                     <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
