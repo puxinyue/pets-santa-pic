@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { authClient } from '@/lib/auth-client';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import LayoutWithNav from '@/components/LayoutWithNav';
 
 interface BillingData {
   credits: {
@@ -78,8 +79,8 @@ function BillingContent() {
   const { credits, payments, transactions } = billingData!;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+    <div className="bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="mb-12">
           <h1 className="text-5xl font-bold text-slate-900 dark:text-white mb-4 festive-font">
             Billing & Credits
@@ -197,36 +198,21 @@ function BillingContent() {
             <div className="text-slate-500 dark:text-slate-400">No transactions yet</div>
           )}
         </div>
-
-        <Suspense fallback={null}>
-          <SuccessNotification />
-        </Suspense>
       </div>
-    </div>
-  );
-}
-
-function SuccessNotification() {
-  const searchParams = useSearchParams();
-  const success = searchParams.get('success');
-
-  if (!success) return null;
-
-  return (
-    <div className="fixed bottom-4 right-4 bg-green-600 text-white px-6 py-4 rounded-2xl shadow-xl">
-      Payment successful! Credits have been added to your account.
     </div>
   );
 }
 
 export default function BillingPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="animate-bounce text-4xl">🐾</div>
-      </div>
-    }>
-      <BillingContent />
-    </Suspense>
+    <LayoutWithNav>
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+          <div className="animate-bounce text-4xl">🐾</div>
+        </div>
+      }>
+        <BillingContent />
+      </Suspense>
+    </LayoutWithNav>
   );
 }

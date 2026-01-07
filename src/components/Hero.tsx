@@ -4,7 +4,6 @@
 import React, { useState, useRef } from 'react';
 import { STYLE_TEMPLATES } from '@/lib/constants';
 import { StyleTemplate, User } from '@/lib/types';
-import { generatePetPortrait } from '@/lib/geminiService';
 
 interface HeroProps {
   onGenerated: (original: string, generated: string, style: string) => void;
@@ -14,11 +13,15 @@ interface HeroProps {
 
 const Hero: React.FC<HeroProps> = ({ onGenerated, user, onLogin }) => {
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null); // Blob URL for API
+  const [localPreview, setLocalPreview] = useState<string | null>(null); // Base64 for display
   const [selectedStyle, setSelectedStyle] = useState<StyleTemplate>(STYLE_TEMPLATES[0]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [generationStatus, setGenerationStatus] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -30,35 +33,47 @@ const Hero: React.FC<HeroProps> = ({ onGenerated, user, onLogin }) => {
       }
       setFile(selected);
       setError(null);
-      
-      // 先显示本地预览
+      setIsUploading(true);
+
+      // 生成本地预览
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPreview(reader.result as string);
+        setLocalPreview(reader.result as string);
       };
       reader.readAsDataURL(selected);
-      
-      // 上传到 Vercel Blob
+
+      // 上传到 Vercel Blob，添加随机数避免文件名重复
       try {
+        // 获取文件扩展名
+        const fileExtension = selected.name.split('.').pop();
+        // 生成带随机数的文件名
+        const randomFileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExtension}`;
+
+        // 创建一个新的文件对象，使用随机文件名
+        const fileWithRandomName = new File([selected], randomFileName, { type: selected.type });
+
         const formData = new FormData();
-        formData.append('file', selected);
-        
+        formData.append('file', fileWithRandomName);
+
         const response = await fetch('/api/upload', {
           method: 'POST',
           body: formData,
         });
-        
+
         if (!response.ok) {
-          throw new Error('Upload failed');
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Upload failed');
         }
-        
+
         const data = await response.json();
-        // 将 Blob URL 保存到 state，用于后续生成
+        // 设置为 Blob URL，用于后续生成
         setPreview(data.url);
       } catch (err) {
         console.error('Upload error:', err);
         setError('Failed to upload image. Please try again.');
+        setIsUploading(false); // 只有失败时才在这里重置
       }
+      // 成功时在useEffect中重置isUploading
     }
   };
 
@@ -68,30 +83,109 @@ const Hero: React.FC<HeroProps> = ({ onGenerated, user, onLogin }) => {
       return;
     }
 
+    if (!user) {
+      onLogin();
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
     setResult(null);
+    setTaskId(null);
+    setGenerationStatus('Creating generation task...');
 
     try {
-      const generatedUrl = await generatePetPortrait(preview, selectedStyle.prompt);
-      if (generatedUrl) {
-        setResult(generatedUrl);
-        onGenerated(preview, generatedUrl, selectedStyle.label);
-      } else {
-        setError("Generation failed. Please try again.");
+      // 创建生图任务
+      const response = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageUrl: preview,
+          prompt: selectedStyle.prompt,
+          style: selectedStyle.label
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create generation task');
       }
+
+      const data = await response.json();
+      setTaskId(data.taskId);
+      setGenerationStatus('Task created! Waiting for generation to complete...');
+
+      // 开始轮询任务状态
+      pollTaskStatus(data.taskId);
     } catch (err: any) {
-      setError("Something went wrong. Please check your API key or connection.");
-    } finally {
+      setError(err.message || "Something went wrong. Please try again.");
       setIsGenerating(false);
     }
   };
 
+  const pollTaskStatus = async (taskId: string) => {
+    try {
+      const response = await fetch(`/api/task-status/${taskId}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to check task status');
+      }
+
+      const data = await response.json();
+
+      console.log('Task status check result:', data);
+
+      if (data.success && data.task) {
+        if (data.task.status === 'success' && data.task.generatedImageUrl) {
+          console.log('Task completed successfully with image URL:', data.task.generatedImageUrl);
+          setResult(data.task.generatedImageUrl);
+          onGenerated(data.task.originalImageUrl, data.task.generatedImageUrl, data.task.style);
+          setGenerationStatus('Generation complete!');
+          setIsGenerating(false);
+          // 停止轮询
+          return;
+        } else if (data.task.status === 'failed') {
+          console.log('Task failed:', data.task.errorMessage);
+          setError(data.task.errorMessage || 'Generation failed. Please try again.');
+          setGenerationStatus('');
+          setIsGenerating(false);
+          // 停止轮询
+          return;
+        } else {
+          console.log('Task still in progress, status:', data.task.status);
+          // 继续轮询
+          setGenerationStatus('Generating image... This may take a few moments.');
+          setTimeout(() => pollTaskStatus(taskId), 3000);
+        }
+      } else {
+        console.error('Invalid response format:', data);
+        setTimeout(() => pollTaskStatus(taskId), 5000);
+      }
+    } catch (err: any) {
+      console.error('Error polling task status:', err);
+      setGenerationStatus('Error occurred, retrying...');
+      setTimeout(() => pollTaskStatus(taskId), 5000);
+    }
+  };
+
+  // 当preview设置成功时，重置isUploading
+  React.useEffect(() => {
+    if (preview && isUploading) {
+      setIsUploading(false);
+    }
+  }, [preview, isUploading]);
+
   const reset = () => {
     setFile(null);
     setPreview(null);
+    setLocalPreview(null);
     setResult(null);
     setError(null);
+    setTaskId(null);
+    setGenerationStatus('');
+    setIsUploading(false);
   };
 
   const handleDownload = () => {
@@ -165,9 +259,9 @@ const Hero: React.FC<HeroProps> = ({ onGenerated, user, onLogin }) => {
               <div className="flex flex-col gap-3">
                 <button
                   onClick={handleGenerate}
-                  disabled={isGenerating || !preview}
+                  disabled={isGenerating || isUploading || !preview}
                   className={`w-full py-4 rounded-full font-bold text-lg shadow-xl transition-all transform active:scale-95 flex items-center justify-center gap-2 ${
-                    isGenerating || !preview
+                    isGenerating || isUploading || !preview
                     ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-500 cursor-not-allowed shadow-none'
                     : 'bg-red-600 dark:bg-red-600 text-white hover:bg-red-700 dark:hover:bg-red-500 hover:-translate-y-1'
                   }`}
@@ -178,7 +272,7 @@ const Hero: React.FC<HeroProps> = ({ onGenerated, user, onLogin }) => {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Generating...
+                      {generationStatus || 'Generating...'}
                     </span>
                   ) : (
                     'Generate Christmas Look'
@@ -217,10 +311,21 @@ const Hero: React.FC<HeroProps> = ({ onGenerated, user, onLogin }) => {
                     </button>
                   </div>
                 </div>
-              ) : preview ? (
+              ) : isUploading ? (
+                <div className="flex-grow flex flex-col items-center justify-center border-4 border-dashed border-red-200 dark:border-red-800 rounded-3xl p-10 bg-red-50/50 dark:bg-red-900/10">
+                  <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-6 animate-pulse">
+                    <svg className="animate-spin h-10 w-10 text-red-500 dark:text-red-400" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300 mb-2">Uploading your image...</h3>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm text-center">Please wait while we upload your pet photo</p>
+                </div>
+              ) : localPreview || preview ? (
                 <div className="flex-grow flex flex-col animate-fade-in">
                   <div className="relative rounded-3xl overflow-hidden bg-slate-100 dark:bg-slate-800 aspect-square shadow-inner">
-                    <img src={preview} alt="Pet Preview" className="w-full h-full object-cover" />
+                    <img src={localPreview || preview || ''} alt="Pet Preview" className="w-full h-full object-cover" />
                     <button onClick={reset} className="absolute top-4 right-4 bg-white/90 dark:bg-slate-800/90 p-2 rounded-full shadow-lg hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-red-600 transition-all">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

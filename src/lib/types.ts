@@ -13,6 +13,9 @@ export interface Creation {
   generatedImage: string;
   style: string;
   date: string;
+  status?: 'waiting' | 'processing' | 'success' | 'failed';
+  prompt?: string;
+  errorMessage?: string;
 }
 
 export interface StyleTemplate {
